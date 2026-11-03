@@ -121,6 +121,7 @@ section.on{display:block}
 .seg button{flex:1;border:0;background:none;padding:8px 6px;border-radius:9px;font-weight:600;font-size:13px;color:var(--muted);white-space:nowrap}
 .seg button.on{background:#fff;color:var(--navy);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .md-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px}
+.md-head .venue{font-size:13.5px;font-weight:600;color:var(--steel);margin-top:5px}
 .md-head .d{font-family:var(--cond);font-weight:800;font-size:22px;text-transform:uppercase;color:var(--navy);line-height:1}
 .bar{height:5px;background:var(--ice)}
 .bar div{height:100%;background:var(--steel);transition:width .3s}
@@ -370,6 +371,8 @@ const toast = (m) => { const t = $('#toast'); t.textContent = m; t.classList.add
 
 const SB_URL = 'https://lzlxstggdncmlfigwenk.supabase.co', SB_KEY = 'sb_publishable_Aouu20NbtjO4MUCHsO8FPw_sfYEybcP';
 let SB = null, LINEUP = null, creating = false;
+const venueOf = (n) => n.venue || (LINEUP && LINEUP.iso === n.iso ? LINEUP.venue : '') || '';
+const whenOf = (n) => n.time || (LINEUP && LINEUP.iso === n.iso ? LINEUP.time : '') || '';
 const getPin = () => { try { return localStorage.getItem('sp_pin') || ''; } catch (e) { return ''; } };
 const setPin = (p) => { try { p ? localStorage.setItem('sp_pin', p) : localStorage.removeItem('sp_pin'); } catch (e) {} };
 const todayISO = () => { const d = new Date(Date.now() + 4 * 3600e3); return d.toISOString().slice(0, 10); };
@@ -497,7 +500,7 @@ function renderResults() {
   let h = `<div class="h">Results<small>${list.filter(SP.isComplete).length} completed</small></div>`;
   list.forEach((n) => {
     const c = SP.champion(n), order = SP.finishOrder(n), live = !SP.isComplete(n);
-    h += `<div class="card res ${openRes === n.iso ? 'open' : ''}" data-iso="${n.iso}"><div class="top2"><div><div class="d">${live ? '<span class="live-dot"></span>' : ''}${shortDate(n.iso)}</div><div class="f">${n.teams.length} teams · first to ${n.target}</div></div>
+    h += `<div class="card res ${openRes === n.iso ? 'open' : ''}" data-iso="${n.iso}"><div class="top2"><div><div class="d">${live ? '<span class="live-dot"></span>' : ''}${shortDate(n.iso)}</div><div class="f">${n.venue ? esc(n.venue) + ' · ' : ''}${n.teams.length} teams · first to ${n.target}</div></div>
       <div class="ch">${c !== null && !live ? '🏆 ' + esc(SP.tname(n, c)) : live ? 'In progress' : '-'}<small>${live ? '' : 'Champions'}</small></div></div>
       <div class="body"><table class="lt"><thead><tr><th class="l" style="padding-left:14px">Pos</th><th class="l">Team</th><th>W</th><th>For</th><th style="padding-right:14px">Agst</th></tr></thead><tbody>${order.map((i, k) => { const s = SP.standings(n).find((x) => x.i === i); return `<tr><td class="pos">${k + 1}</td><td class="l nm">${esc(SP.tname(n, i))}</td><td>${s.w}</td><td>${s.pf}</td><td style="padding-right:14px">${s.pa}</td></tr>`; }).join('')}</tbody></table>${matchesHtml(n)}</div></div>`;
   });
@@ -510,7 +513,7 @@ function renderResults() {
 function teamsMessage(n) {
   const S = SP.season(NIGHTS);
   const seed = (p) => { const x = S.byName[p]; return x && x.classified ? x.pos : 'new'; };
-  let t = `*Sick Puppies Padel* 🎾🐶\n\n*${n.date}* 🎾\n🏟️ ${Math.ceil(n.teams.length / 2)} courts, ${n.teams.length} teams, first to ${n.target}\n\n*Teams* ⚔️\n`;
+  let t = `*Sick Puppies Padel* 🎾🐶\n\n*${n.date}* 🎾\n${venueOf(n) ? '📍 ' + venueOf(n) + (whenOf(n) ? ', ' + whenOf(n) : '') + '\n' : ''}🏟️ ${Math.ceil(n.teams.length / 2)} courts, ${n.teams.length} teams, first to ${n.target}\n\n*Teams* ⚔️\n`;
   n.teams.forEach((tm, i) => { t += `${i + 1}. ${tm.p[0]} (${seed(tm.p[0])}) & ${tm.p[1]} (${seed(tm.p[1])})\n`; });
   t += `\n*Current seeds* 📋\n`; S.ranked.forEach((x) => { t += `${x.pos}. ${x.name} ${f1(x.rating)}\n`; });
   return t;
@@ -582,7 +585,7 @@ function renderMatchday() {
   const el = $('#v-matchday'), n = active();
   if (!n) { if (canWrite) renderBuilder(el); else renderPreview(el); return; }
   const pr = SP.progress(n), st = SP.standings(n);
-  let h = `<div class="card"><div class="md-head"><div><div class="d">${esc(n.date)}</div><div class="muted" style="font-size:12.5px;margin-top:4px">${n.teams.length} teams · first to ${n.target} · ${pr.done} of ${pr.total} games</div></div><span class="badge">${pr.finalDone ? 'Final in' : 'Live'}</span></div><div class="bar"><div style="width:${pr.total ? pr.done / pr.total * 100 : 0}%"></div></div></div>
+  let h = `<div class="card"><div class="md-head"><div><div class="d">${esc(n.date)}</div>${venueOf(n) ? `<div class="venue">\uD83D\uDCCD ${esc(venueOf(n))}${whenOf(n) ? ' \u00B7 ' + esc(whenOf(n)) : ''}</div>` : ''}<div class="muted" style="font-size:12.5px;margin-top:4px">${n.teams.length} teams · first to ${n.target} · ${pr.done} of ${pr.total} games</div></div><span class="badge">${pr.finalDone ? 'Final in' : 'Live'}</span></div><div class="bar"><div style="width:${pr.total ? pr.done / pr.total * 100 : 0}%"></div></div></div>
   <div class="seg">${[['teams', 'Teams'], ['table', 'Table'], ['games', 'Games'], ['playoffs', 'Play-offs'], ['finish', 'Finish']].map(([k, l]) => `<button data-md="${k}" class="${mdTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (mdTab === 'teams') {
     h += `<div class="card">${n.teams.map((t, i) => `<div class="team"><span class="no">${i + 1}</span><span class="pp">${esc(t.p.join(' & '))}</span><span class="sd">${esc(t.seeds || '')}</span></div>`).join('')}</div>
@@ -640,18 +643,20 @@ function renderPreview(el) {
   const t = lineupTeams();
   if (!t) { el.innerHTML = `<div class="card"><div class="empty">No tournament running.<br><br>Teams for Tuesday and Friday appear here at 11:30 on the day.</div></div>`; return; }
   const S = t.S, lbl = (p) => { const x = S.byName[p]; return x && x.classified ? '#' + x.pos : 'new'; };
-  el.innerHTML = `<div class="h">${esc(shortDate(LINEUP.iso))} teams<small>${t.pairs.length} teams \u00B7 first to ${t.pairs.length <= 4 ? 21 : 15}</small></div>
+  el.innerHTML = `${LINEUP.venue ? `<div class="card"><div class="md-head"><div><div class="d">${esc(shortDate(LINEUP.iso))}</div><div class="venue">\uD83D\uDCCD ${esc(LINEUP.venue)}${LINEUP.time ? ' \u00B7 ' + esc(LINEUP.time) : ''}</div></div></div></div>` : ''}<div class="h">${esc(shortDate(LINEUP.iso))} teams<small>${t.pairs.length} teams \u00B7 first to ${t.pairs.length <= 4 ? 21 : 15}</small></div>
   <div class="card">${t.pairs.map((p, i) => `<div class="team"><span class="no">${i + 1}</span><span class="pp">${esc(p[0])} <small class="muted">${lbl(p[0])}</small> & ${esc(p[1])} <small class="muted">${lbl(p[1])}</small></span></div>`).join('')}</div>
   <p class="note">Top seed with bottom seed. Live scores appear here once play starts.</p>`;
 }
 async function autoCreate() {
+  const a = active();
+  if (canWrite && a && !a.venue && LINEUP && LINEUP.iso === a.iso && LINEUP.venue && !creating) { creating = true; await saveNight({ ...a, venue: LINEUP.venue, time: LINEUP.time || '' }); creating = false; render(); return; }
   if (!canWrite || creating || active()) return;
   const t = lineupTeams(); if (!t) return;
   creating = true;
   const lbl = (p) => { const x = t.S.byName[p]; return x && x.classified ? '#' + x.pos : 'new'; };
   const nt = t.pairs.length;
   const n = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: nt <= 4 ? 21 : 15,
-    teams: t.pairs.map((p) => ({ p, seeds: p.map(lbl).join(' & ') })), rounds: SP.fixtures(nt), scores: {}, status: 'live', createdBy: 'lineup' };
+    teams: t.pairs.map((p) => ({ p, seeds: p.map(lbl).join(' & ') })), rounds: SP.fixtures(nt), scores: {}, status: 'live', createdBy: 'lineup', venue: LINEUP.venue || '', time: LINEUP.time || '' };
   if (await saveNight(n)) { mdTab = 'teams'; render(); toast('Today\u2019s teams are in'); }
   creating = false;
 }
