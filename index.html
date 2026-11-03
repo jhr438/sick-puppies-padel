@@ -374,6 +374,8 @@ const SB_URL = 'https://lzlxstggdncmlfigwenk.supabase.co', SB_KEY = 'sb_publisha
 let SB = null, LINEUP = null, creating = false;
 const venueOf = (n) => n.venue || (LINEUP && LINEUP.iso === n.iso ? LINEUP.venue : '') || '';
 const whenOf = (n) => n.time || (LINEUP && LINEUP.iso === n.iso ? LINEUP.time : '') || '';
+const courtsOf = (n) => { const c = n.courts || (LINEUP && LINEUP.iso === n.iso ? LINEUP.courts : null); return Array.isArray(c) && c.length ? c : null; };
+const courtName = (n, ci) => 'Court ' + ((courtsOf(n) || [])[ci] ?? ci + 1);
 const getPin = () => { try { return localStorage.getItem('sp_pin') || ''; } catch (e) { return ''; } };
 const setPin = (p) => { try { p ? localStorage.setItem('sp_pin', p) : localStorage.removeItem('sp_pin'); } catch (e) {} };
 const todayISO = () => { const d = new Date(Date.now() + 4 * 3600e3); return d.toISOString().slice(0, 10); };
@@ -559,7 +561,7 @@ function roundHtml(n, ri) {
     : locked
     ? `<div class="rfoot"><span class="st done">✓ Round ${ri + 1} saved</span>${canWrite ? `<button class="sbtn e" data-editround="${ri}">Edit</button>` : ''}</div>`
     : `<div class="rfoot"><span class="st">${ed ? 'Editing' : gs.some(isSet) ? 'Part saved' : 'Not played'}</span>${ed ? `<button class="sbtn e" data-cancelround="${ri}">Cancel</button>` : ''}<button class="sbtn" data-saveround="${ri}" ${ready && canWrite ? '' : 'disabled'}>Save round ${ri + 1}</button></div>`;
-  return `<div class="h">Round ${ri + 1}</div><div class="card">${gs.map((g) => gameHtml(n, g, 'Court ' + (g.ci + 1), locked)).join('')}${foot}</div>`;
+  return `<div class="h">Round ${ri + 1}</div><div class="card">${gs.map((g) => gameHtml(n, g, courtName(n, g.ci), locked)).join('')}${foot}</div>`;
 }
 function poHtml(n, g) {
   const ed = EDITING.has(g.key), locked = isSet(g) && !ed;
@@ -590,6 +592,7 @@ function renderMatchday() {
   <div class="seg">${[['teams', 'Teams'], ['table', 'Table'], ['games', 'Games'], ['playoffs', 'Play-offs'], ['finish', 'Finish']].map(([k, l]) => `<button data-md="${k}" class="${mdTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (mdTab === 'teams') {
     h += `<div class="card">${n.teams.map((t, i) => `<div class="team"><span class="no">${i + 1}</span><span class="pp">${esc(t.p.join(' & '))}</span><span class="sd">${esc(t.seeds || '')}</span></div>`).join('')}</div>
+    ${canWrite ? `<div class="card pad"><label class="muted" style="font-size:12px;font-weight:600;letter-spacing:.5px">COURT NUMBERS</label><div class="field" style="padding:8px 0 0"><input id="courtsIn" inputmode="numeric" placeholder="${[...Array(Math.ceil(n.teams.length / 2)).keys()].map((i) => i + 1).join(', ')}" value="${(courtsOf(n) || []).join(', ')}"><button id="courtsGo">Save</button></div><p class="note" style="margin:6px 0 0">e.g. 2, 3, 4. Shown on every game.</p></div>` : ''}
     <button class="btn sec" id="cpTeams">Copy teams for WhatsApp</button>
     ${pr.done === 0 && canWrite ? '<button class="btn ghost" id="delNight">Delete this tournament</button>' : ''}`;
   } else if (mdTab === 'games') {
@@ -618,6 +621,7 @@ function renderMatchday() {
   el.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => { const k = b.dataset.edit, cur = (n.scores || {})[k] || ['', '']; PENDING[k] = [cur[0], cur[1]]; EDITING.add(k); renderMatchday(); });
   el.querySelectorAll('[data-cancel]').forEach((b) => b.onclick = () => { delete PENDING[b.dataset.cancel]; EDITING.delete(b.dataset.cancel); renderMatchday(); });
   const ct = $('#cpTeams'); if (ct) ct.onclick = () => copy(teamsMessage(n));
+  const cg = $('#courtsGo'); if (cg) cg.onclick = async () => { const v = $('#courtsIn').value.split(/[^0-9]+/).filter(Boolean).map(Number); if (await saveNight({ ...n, courts: v })) { toast('Courts saved'); renderMatchday(); } };
   const cr = $('#cpRes'); if (cr) cr.onclick = () => copy(resultsMessage({ ...n, status: 'complete' }));
   const dn = $('#delNight'); if (dn) dn.onclick = () => sheet(`<h3>Delete tournament?</h3><p class="note">${esc(n.date)} has no scores yet. This removes it so you can make new teams.</p><button class="btn" data-ok>Delete</button><button class="btn sec" data-x>Cancel</button>`, async () => { const { error } = await SB.rpc('delete_night', { p_pin: getPin(), p_iso: n.iso }); if (error) { toast('Couldn’t delete'); return; } delete NIGHTS[n.iso]; render(); });
   const fb = $('#finish'); if (fb) fb.onclick = () => sheet(`<h3>Tournament finished?</h3><p class="note">Locks ${esc(n.date)}, crowns ${esc(SP.tname(n, SP.champion(n)))} and updates the seeds. You can reopen it from Results if a score is wrong.</p><button class="btn" data-ok>Finish and update</button><button class="btn sec" data-x>Not yet</button>`, async () => {
@@ -650,14 +654,14 @@ function renderPreview(el) {
 }
 async function autoCreate() {
   const a = active();
-  if (canWrite && a && !a.venue && LINEUP && LINEUP.iso === a.iso && LINEUP.venue && !creating) { creating = true; await saveNight({ ...a, venue: LINEUP.venue, time: LINEUP.time || '' }); creating = false; render(); return; }
+  if (canWrite && a && LINEUP && LINEUP.iso === a.iso && !creating && ((!a.venue && LINEUP.venue) || (!a.courts && LINEUP.courts))) { creating = true; await saveNight({ ...a, venue: a.venue || LINEUP.venue || '', time: a.time || LINEUP.time || '', courts: a.courts || LINEUP.courts || null }); creating = false; render(); return; }
   if (!canWrite || creating || active()) return;
   const t = lineupTeams(); if (!t) return;
   creating = true;
   const lbl = (p) => { const x = t.S.byName[p]; return x && x.classified ? '#' + x.pos : 'new'; };
   const nt = t.pairs.length;
   const n = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: nt <= 4 ? 21 : 15,
-    teams: t.pairs.map((p) => ({ p, seeds: p.map(lbl).join(' & ') })), rounds: SP.fixtures(nt), scores: {}, status: 'live', createdBy: 'lineup', venue: LINEUP.venue || '', time: LINEUP.time || '' };
+    teams: t.pairs.map((p) => ({ p, seeds: p.map(lbl).join(' & ') })), rounds: SP.fixtures(nt), scores: {}, status: 'live', createdBy: 'lineup', venue: LINEUP.venue || '', time: LINEUP.time || '', courts: LINEUP.courts || null };
   if (await saveNight(n)) { mdTab = 'teams'; render(); toast('Today\u2019s teams are in'); }
   creating = false;
 }
