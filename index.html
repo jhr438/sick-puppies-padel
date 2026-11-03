@@ -95,9 +95,10 @@ section.on{display:block}
 .badge{font-family:var(--cond);font-weight:700;font-size:13px;min-width:44px;text-align:center;padding:3px 8px;border-radius:7px;background:var(--ice);color:var(--navy)}
 .badge.gold{background:var(--navy);color:#fff}
 .wl{display:flex;gap:6px}
-.wl span{font-family:var(--cond);font-weight:700;font-size:13px;min-width:42px;text-align:center;padding:3px 8px;border-radius:7px}
+.wl span{font-family:var(--cond);font-weight:700;font-size:13px;width:44px;box-sizing:border-box;text-align:center;padding:3px 8px;border-radius:7px}
 .wl .w{background:#E3F2EA;color:var(--win)}
 .wl .l{background:#F8E5E5;color:var(--loss)}
+.wl .p{background:var(--navy);color:#fff;width:52px}
 
 /* results */
 .res .top2{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;cursor:pointer}
@@ -477,7 +478,7 @@ function renderPlayers() {
   <div class="h">Form<small>last 5 matches</small></div><div class="card">${x.form.slice(-5).reverse().map((f) => `<div class="row"><span class="form"><i class="${f.r}">${f.r}</i></span><span class="main" style="flex:1">${esc(f.txt)}</span><span class="s">${shortDate(f.iso)}</span></div>`).join('')}</div>
   <div class="h">Tournaments</div><div class="card">${[...x.log].reverse().map((l) => `<div class="row"><div><div class="main">${shortDate(l.iso)} · with ${esc(l.partner)}</div><div class="s">${l.pf}-${l.pa} points · ${l.teams} teams</div></div><span class="badge ${l.champ ? 'gold' : ''}">${l.champ ? '🏆 1st' : ord(l.finish)}</span></div>`).join('')}</div>
   <div class="h">Partners</div><div class="card">${Object.entries(x.partners).sort((a, b) => b[1].n - a[1].n || b[1].titles - a[1].titles).map(([p, v]) => `<div class="row"><div><div class="main">${esc(p)}</div><div class="s">${v.n} tournament${v.n > 1 ? 's' : ''}${v.titles ? ` · ${v.titles} title${v.titles > 1 ? 's' : ''}` : ''}</div></div><span class="badge">${f1(v.pf / (v.pf + v.pa) * 100)}%</span></div>`).join('')}</div>
-  <div class="h">Head to head<small>wins and losses v each player</small></div><div class="card">${Object.entries(x.opps).sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1]) || a[0].localeCompare(b[0])).slice(0, 12).map(([p, [w, l]]) => `<div class="row"><span class="main">${esc(p)}</span><span class="wl"><span class="w">${w}W</span><span class="l">${l}L</span></span></div>`).join('')}</div>`;
+  <div class="h">Head to head<small>won, lost, win % v each player</small></div><div class="card">${Object.entries(x.opps).sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1]) || a[0].localeCompare(b[0])).slice(0, 12).map(([p, [w, l]]) => `<div class="row"><span class="main">${esc(p)}</span><span class="wl"><span class="w">${w}W</span><span class="l">${l}L</span><span class="p">${w + l ? Math.round(w / (w + l) * 100) : 0}%</span></span></div>`).join('')}</div>`;
   $('#v-players').innerHTML = h;
   const sel = $('#psel'); sel.value = focusPlayer; sel.onchange = () => { focusPlayer = sel.value; renderPlayers(); };
 }
