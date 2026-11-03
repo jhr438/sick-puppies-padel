@@ -132,6 +132,7 @@ section.on{display:block}
 .game .t.won{color:var(--win)}
 .game .sc{font:800 26px var(--cond);text-align:center;color:var(--navy);background:var(--ice);border-radius:10px;padding:7px 0}
 .game .sc.w{background:var(--navy);color:#fff}
+.game .sc.muted{color:#9AA6B6}
 .game .act{grid-column:1/-1;display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:2px}
 .game .act .st{font-size:12px;color:var(--muted);margin-right:auto}
 .game .act .st.done{color:var(--win);font-weight:600}
@@ -532,6 +533,8 @@ function gameHtml(n, g, label, locked, actions) {
   const names = (i, cls) => `<div class="t ${cls}">${nm(i).map((p) => `<span>${esc(p)}</span>`).join('')}</div>`;
   if (locked) return `<div class="game"><div class="court">${label}</div>
     ${names(g.ta, wa ? 'won' : '')}<div class="sc ${wa ? 'w' : ''}">${g.sa}</div><div class="sc ${wb ? 'w' : ''}">${g.sb}</div>${names(g.tb, 'r ' + (wb ? 'won' : ''))}${actions || ''}</div>`;
+  if (!canWrite) return `<div class="game"><div class="court">${label}</div>
+    ${names(g.ta, '')}<div class="sc muted">${g.sa ?? '-'}</div><div class="sc muted">${g.sb ?? '-'}</div>${names(g.tb, 'r')}</div>`;
   const p = PENDING[g.key] || [g.sa ?? '', g.sb ?? ''];
   const dis = canWrite ? '' : 'disabled';
   return `<div class="game"><div class="court">${label}</div>
@@ -548,14 +551,15 @@ function roundHtml(n, ri) {
   const gs = SP.groupGames(n).filter((g) => g.ri === ri), ed = EDITING.has('r' + ri);
   const locked = gs.every(isSet) && !ed;
   const ready = gs.every((g) => okPair(pend(n, g.key)));
-  const foot = locked
+  const foot = !canWrite ? `<div class="rfoot"><span class="st ${locked ? 'done' : ''}">${locked ? '\u2713 Round ' + (ri + 1) + ' complete' : gs.some(isSet) ? 'In progress' : 'To play'}</span></div>`
+    : locked
     ? `<div class="rfoot"><span class="st done">✓ Round ${ri + 1} saved</span>${canWrite ? `<button class="sbtn e" data-editround="${ri}">Edit</button>` : ''}</div>`
     : `<div class="rfoot"><span class="st">${ed ? 'Editing' : gs.some(isSet) ? 'Part saved' : 'Not played'}</span>${ed ? `<button class="sbtn e" data-cancelround="${ri}">Cancel</button>` : ''}<button class="sbtn" data-saveround="${ri}" ${ready && canWrite ? '' : 'disabled'}>Save round ${ri + 1}</button></div>`;
   return `<div class="h">Round ${ri + 1}</div><div class="card">${gs.map((g) => gameHtml(n, g, 'Court ' + (g.ci + 1), locked)).join('')}${foot}</div>`;
 }
 function poHtml(n, g) {
   const ed = EDITING.has(g.key), locked = isSet(g) && !ed;
-  const act = locked
+  const act = !canWrite ? '' : locked
     ? `<div class="act"><span class="st done">✓ Saved</span>${canWrite ? `<button class="sbtn e" data-edit="${g.key}">Edit</button>` : ''}</div>`
     : `<div class="act"><span class="st">${ed ? 'Editing' : 'Not played'}</span>${ed ? `<button class="sbtn e" data-cancel="${g.key}">Cancel</button>` : ''}<button class="sbtn" data-save="${g.key}" ${okPair(pend(n, g.key)) && canWrite ? '' : 'disabled'}>Save</button></div>`;
   return gameHtml(n, g, 'First to ' + n.target, locked, act);
@@ -586,7 +590,7 @@ function renderMatchday() {
     ${pr.done === 0 && canWrite ? '<button class="btn ghost" id="delNight">Delete this tournament</button>' : ''}`;
   } else if (mdTab === 'games') {
     (n.rounds || []).forEach((r, ri) => { h += roundHtml(n, ri); });
-    h += `<p class="note">Enter the scores for every court, then tap Save round. Saved rounds update the table and play-offs straight away. Tap Edit to correct one.</p>`;
+    h += !canWrite ? `<p class="note">Scores appear here as each round is saved. Pull down or reopen to refresh.</p>` : `<p class="note">Enter the scores for every court, then tap Save round. Saved rounds update the table and play-offs straight away. Tap Edit to correct one.</p>`;
   } else if (mdTab === 'table') {
     h += `<div class="card"><table class="lt"><thead><tr><th class="l" style="padding-left:12px">#</th><th class="l">Team</th><th>P</th><th>W</th><th>+/-</th><th style="padding-right:14px">Pts</th></tr></thead><tbody>${st.map((s, k) => `<tr class="${k < 2 ? 'zone' : ''}"><td class="pos">${k + 1}</td><td class="l nm">${esc(SP.tname(n, s.i))}</td><td>${s.pl}</td><td>${s.w}</td><td>${s.pf - s.pa > 0 ? '+' : ''}${s.pf - s.pa}</td><td class="rt">${s.pf}</td></tr>`).join('')}</tbody></table></div><p class="note">Ranked on total points, then wins, then points difference. Top 2 go to the final.</p>`;
   } else if (mdTab === 'playoffs') {
@@ -597,7 +601,8 @@ function renderMatchday() {
     h += `<div class="card"><table class="lt"><tbody>${order.map((i, k) => `<tr><td class="pos">${k === 0 && pr.finalDone ? '🏆' : k + 1}</td><td class="l nm">${esc(SP.tname(n, i))}</td></tr>`).join('')}</tbody></table></div>`;
     if (missing || !pr.finalDone) h += `<div class="warn">${missing ? `${missing} group game${missing > 1 ? 's' : ''} still to enter. ` : ''}${!pr.finalDone ? 'Final score still to enter.' : ''}</div>`;
     else h += `<div class="ok">All scores in. Finishing locks the night and updates the table, seeds and player stats.</div>`;
-    h += `<button class="btn" id="finish" ${!missing && pr.finalDone && canWrite ? '' : 'disabled'}>Tournament finished</button>
+    if (canWrite) h += `<button class="btn" id="finish" ${!missing && pr.finalDone ? '' : 'disabled'}>Tournament finished</button>`;
+    h += `
     <button class="btn sec" id="cpRes">Copy results for WhatsApp</button>`;
   }
   el.innerHTML = h;
