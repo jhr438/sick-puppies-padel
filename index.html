@@ -505,11 +505,19 @@ function renderResults() {
     const c = SP.champion(n), order = SP.finishOrder(n), live = !SP.isComplete(n);
     h += `<div class="card res ${openRes === n.iso ? 'open' : ''}" data-iso="${n.iso}"><div class="top2"><div><div class="d">${live ? '<span class="live-dot"></span>' : ''}${shortDate(n.iso)}</div><div class="f">${n.venue ? esc(n.venue) + ' · ' : ''}${n.teams.length} teams · first to ${n.target}</div></div>
       <div class="ch">${c !== null && !live ? '🏆 ' + esc(SP.tname(n, c)) : live ? 'In progress' : '-'}<small>${live ? '' : 'Champions'}</small></div></div>
-      <div class="body"><table class="lt"><thead><tr><th class="l" style="padding-left:14px">Pos</th><th class="l">Team</th><th>W</th><th>For</th><th style="padding-right:14px">Agst</th></tr></thead><tbody>${order.map((i, k) => { const s = SP.standings(n).find((x) => x.i === i); return `<tr><td class="pos">${k + 1}</td><td class="l nm">${esc(SP.tname(n, i))}</td><td>${s.w}</td><td>${s.pf}</td><td style="padding-right:14px">${s.pa}</td></tr>`; }).join('')}</tbody></table>${matchesHtml(n)}</div></div>`;
+      <div class="body"><table class="lt"><thead><tr><th class="l" style="padding-left:14px">Pos</th><th class="l">Team</th><th>W</th><th>For</th><th style="padding-right:14px">Agst</th></tr></thead><tbody>${order.map((i, k) => { const s = SP.standings(n).find((x) => x.i === i); return `<tr><td class="pos">${k + 1}</td><td class="l nm">${esc(SP.tname(n, i))}</td><td>${s.w}</td><td>${s.pf}</td><td style="padding-right:14px">${s.pa}</td></tr>`; }).join('')}</tbody></table>${matchesHtml(n)}${canWrite && !live ? `<div class="pad"><button class="btn sec" data-reopen="${n.iso}">Reopen to correct a score</button></div>` : ''}</div></div>`;
   });
   h += `<p class="note">Group table ranked on total points, then wins. W, For and Agst are group games only.</p>`;
   $('#v-results').innerHTML = h;
   $('#v-results').querySelectorAll('.res .top2').forEach((t) => t.onclick = () => { const iso = t.parentNode.dataset.iso; openRes = openRes === iso ? null : iso; renderResults(); });
+  $('#v-results').querySelectorAll('[data-reopen]').forEach((btn) => btn.onclick = () => {
+    const n = NIGHTS[btn.dataset.reopen]; if (!n) return;
+    if (active()) { toast('Finish the live tournament first'); return; }
+    sheet(`<h3>Reopen ${esc(n.date)}?</h3><p class="note">It goes back to Matchday so you can edit any score. Tap Tournament finished again when it\u2019s right, and the table and seeds update.</p><button class="btn" data-ok>Reopen</button><button class="btn sec" data-x>Cancel</button>`, async () => {
+      const r = { ...n, status: 'live' }; delete r.completedAt;
+      if (await saveNight(r)) { NIGHTS[n.iso] = r; mdTab = 'playoffs'; go('matchday'); toast('Reopened: tap Edit on the game'); }
+    });
+  });
 }
 
 /* ---------- MATCHDAY ---------- */
