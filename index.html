@@ -538,7 +538,7 @@ function resultsMessage(n) {
   t += `\n*Group table* 📊\n`; st.forEach((s, k) => { t += `${k + 1}. ${SP.tname(n, s.i)} - ${s.w}W, ${s.pf}-${s.pa}\n`; });
   const po = SP.poGames(n).filter((g) => g.sa !== null && g.sb !== null);
   if (po.length) { t += `\n*Play-offs*\n`; po.forEach((g) => { t += `${g.label}: ${SP.tname(n, g.ta)} ${g.sa} - ${g.sb} ${SP.tname(n, g.tb)}\n`; }); }
-  const S = SP.season(NIGHTS); t += `\n*Updated seeds* 🔄\n`; S.ranked.forEach((x) => { t += `${x.pos}. ${x.name} ${f1(x.rating)}\n`; });
+  const S = SP.season({ ...NIGHTS, [n.iso]: { ...n, status: 'complete' } }); t += `\n*Updated seeds* 🔄\n`; S.ranked.forEach((x) => { t += `${x.pos}. ${x.name} ${f1(x.rating)}\n`; });
   return t + `\nGreat games lads 👏`;
 }
 function gameHtml(n, g, label, locked, actions) {
