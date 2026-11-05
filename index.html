@@ -529,6 +529,17 @@ function teamsMessage(n) {
   t += `\n*Current seeds* 📋\n`; S.ranked.forEach((x) => { t += `${x.pos}. ${x.name} ${f1(x.rating)}\n`; });
   return t;
 }
+function matchesMessage(n) {
+  const nc = Math.max(...(n.rounds || [[]]).map((r) => r.length), 0);
+  let t = `*Sick Puppies Padel* 🎾🐶\n\n*${n.date} matches* 🗓️\n${venueOf(n) ? '📍 ' + venueOf(n) + (whenOf(n) ? ', ' + whenOf(n) : '') + '\n' : ''}🏟️ ${[...Array(nc).keys()].map((ci) => courtName(n, ci)).join(', ')} · first to ${n.target}\n`;
+  (n.rounds || []).forEach((r, ri) => {
+    t += `\n*Round ${ri + 1}*\n`;
+    SP.groupGames(n).filter((g) => g.ri === ri).forEach((g) => { const done = g.sa !== null && g.sb !== null;
+      t += `${courtName(n, g.ci)}: ${SP.tname(n, g.ta)} ${done ? g.sa + ' - ' + g.sb : 'v'} ${SP.tname(n, g.tb)}\n`; });
+  });
+  t += `\n*Play-offs* 🏆 (from the group table)\nFinal: 1st v 2nd\n${n.teams.length > 3 ? '3rd place: 3rd v 4th\n' : ''}${n.teams.length > 5 ? '5th place: 5th v 6th\n' : ''}`;
+  return t + `\nLive scores: https://jhr438.github.io/sick-puppies-padel/`;
+}
 function resultsMessage(n) {
   const order = SP.finishOrder(n), st = SP.standings(n), c = SP.champion(n);
   const fin = SP.poGames(n).find((g) => g.stage === 'final');
@@ -600,12 +611,14 @@ function renderMatchday() {
   <div class="seg">${[['teams', 'Teams'], ['table', 'Table'], ['games', 'Games'], ['playoffs', 'Play-offs'], ['finish', 'Finish']].map(([k, l]) => `<button data-md="${k}" class="${mdTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (mdTab === 'teams') {
     h += `<div class="card">${n.teams.map((t, i) => `<div class="team"><span class="no">${i + 1}</span><span class="pp">${esc(t.p.join(' & '))}</span><span class="sd">${esc(t.seeds || '')}</span></div>`).join('')}</div>
-    ${canWrite ? `<div class="card pad"><label class="muted" style="font-size:12px;font-weight:600;letter-spacing:.5px">COURT NUMBERS</label><div class="field" style="padding:8px 0 0"><input id="courtsIn" inputmode="numeric" placeholder="${[...Array(Math.ceil(n.teams.length / 2)).keys()].map((i) => i + 1).join(', ')}" value="${(courtsOf(n) || []).join(', ')}"><button id="courtsGo">Save</button></div><p class="note" style="margin:6px 0 0">e.g. 2, 3, 4. Shown on every game.</p></div>` : ''}
+    ${canWrite ? `<div class="card pad"><label class="muted" style="font-size:12px;font-weight:600;letter-spacing:.5px">COURT NUMBERS</label><div class="field" style="padding:8px 0 0"><input id="courtsIn" inputmode="text" autocomplete="off" placeholder="${[...Array(Math.ceil(n.teams.length / 2)).keys()].map((i) => i + 1).join(', ')}" value="${(courtsOf(n) || []).join(', ')}"><button id="courtsGo">Save</button></div><p class="note" style="margin:6px 0 0">Separate with a comma or space, e.g. 1, 2. Shown on every game and in the WhatsApp messages.</p></div>` : ''}
     <button class="btn sec" id="cpTeams">Copy teams for WhatsApp</button>
+    <button class="btn sec" id="cpMatches">Copy matches for WhatsApp</button>
     ${pr.done === 0 && canWrite ? '<button class="btn ghost" id="delNight">Delete this tournament</button>' : ''}`;
   } else if (mdTab === 'games') {
     (n.rounds || []).forEach((r, ri) => { h += roundHtml(n, ri); });
     h += !canWrite ? `<p class="note">Scores appear here as each round is saved. Pull down or reopen to refresh.</p>` : `<p class="note">Enter the scores for every court, then tap Save round. Saved rounds update the table and play-offs straight away. Tap Edit to correct one.</p>`;
+    h += `<button class="btn sec" id="cpMatches">Copy matches for WhatsApp</button>`;
   } else if (mdTab === 'table') {
     h += `<div class="card"><table class="lt"><thead><tr><th class="l" style="padding-left:12px">#</th><th class="l">Team</th><th>P</th><th>W</th><th>+/-</th><th style="padding-right:14px">Pts</th></tr></thead><tbody>${st.map((s, k) => `<tr class="${k < 2 ? 'zone' : ''}"><td class="pos">${k + 1}</td><td class="l nm">${esc(SP.tname(n, s.i))}</td><td>${s.pl}</td><td>${s.w}</td><td>${s.pf - s.pa > 0 ? '+' : ''}${s.pf - s.pa}</td><td class="rt">${s.pf}</td></tr>`).join('')}</tbody></table></div><p class="note">Ranked on total points, then wins, then points difference. Top 2 go to the final.</p>`;
   } else if (mdTab === 'playoffs') {
@@ -629,6 +642,7 @@ function renderMatchday() {
   el.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => { const k = b.dataset.edit, cur = (n.scores || {})[k] || ['', '']; PENDING[k] = [cur[0], cur[1]]; EDITING.add(k); renderMatchday(); });
   el.querySelectorAll('[data-cancel]').forEach((b) => b.onclick = () => { delete PENDING[b.dataset.cancel]; EDITING.delete(b.dataset.cancel); renderMatchday(); });
   const ct = $('#cpTeams'); if (ct) ct.onclick = () => copy(teamsMessage(n));
+  const cm = $('#cpMatches'); if (cm) cm.onclick = () => copy(matchesMessage(n));
   const cg = $('#courtsGo'); if (cg) cg.onclick = async () => { const v = $('#courtsIn').value.split(/[^0-9]+/).filter(Boolean).map(Number); if (await saveNight({ ...n, courts: v })) { toast('Courts saved'); renderMatchday(); } };
   const cr = $('#cpRes'); if (cr) cr.onclick = () => copy(resultsMessage({ ...n, status: 'complete' }));
   const dn = $('#delNight'); if (dn) dn.onclick = () => sheet(`<h3>Delete tournament?</h3><p class="note">${esc(n.date)} has no scores yet. This removes it so you can make new teams.</p><button class="btn" data-ok>Delete</button><button class="btn sec" data-x>Cancel</button>`, async () => { const { error } = await SB.rpc('delete_night', { p_pin: getPin(), p_iso: n.iso }); if (error) { toast('Couldn’t delete'); return; } delete NIGHTS[n.iso]; render(); });
@@ -656,9 +670,15 @@ function renderPreview(el) {
   const t = lineupTeams();
   if (!t) { el.innerHTML = `<div class="card"><div class="empty">No tournament running.<br><br>Teams for Tuesday and Friday appear here at 11:30 on the day.</div></div>`; return; }
   const S = t.S, lbl = (p) => { const x = S.byName[p]; return x && x.classified ? '#' + x.pos : 'new'; };
+  const pv = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: t.pairs.length <= 4 ? 21 : 15, teams: t.pairs.map((p) => ({ p })), rounds: SP.fixtures(t.pairs.length), scores: {}, venue: LINEUP.venue || '', time: LINEUP.time || '', courts: LINEUP.courts || null };
   el.innerHTML = `${LINEUP.venue ? `<div class="card"><div class="md-head"><div><div class="d">${esc(shortDate(LINEUP.iso))}</div><div class="venue">\uD83D\uDCCD ${esc(LINEUP.venue)}${LINEUP.time ? ' \u00B7 ' + esc(LINEUP.time) : ''}</div></div></div></div>` : ''}<div class="h">${esc(shortDate(LINEUP.iso))} teams<small>${t.pairs.length} teams \u00B7 first to ${t.pairs.length <= 4 ? 21 : 15}</small></div>
   <div class="card">${t.pairs.map((p, i) => `<div class="team"><span class="no">${i + 1}</span><span class="pp">${esc(p[0])} <small class="muted">${lbl(p[0])}</small> & ${esc(p[1])} <small class="muted">${lbl(p[1])}</small></span></div>`).join('')}</div>
+  <div class="h">Matches</div><div class="card">${pv.rounds.map((r, ri) => `<div class="rh">Round ${ri + 1}</div>` + r.map((m, ci) => `<div class="mrow" style="grid-template-columns:62px 1fr 22px 1fr"><span style="font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-weight:600">${esc(courtName(pv, ci))}</span><span class="a">${esc(SP.tname(pv, m[0]))}</span><span class="x" style="text-align:center">v</span><span>${esc(SP.tname(pv, m[1]))}</span></div>`).join('')).join('')}</div>
+  <button class="btn sec" id="cpPvTeams">Copy teams for WhatsApp</button>
+  <button class="btn sec" id="cpPvMatches">Copy matches for WhatsApp</button>
   <p class="note">Top seed with bottom seed. Live scores appear here once play starts.</p>`;
+  $('#cpPvTeams').onclick = () => copy(teamsMessage(pv));
+  $('#cpPvMatches').onclick = () => copy(matchesMessage(pv));
 }
 async function autoCreate() {
   const a = active();
