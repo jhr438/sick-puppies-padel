@@ -768,11 +768,23 @@ function render() {
   if (view === 'info') renderInfo();
 }
 
+/* ---------- name fixes ---------- */
+/* Two Davids (8 Nov 2026): every "David" before 8 Nov is Del Boy, shown as "David \uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC77\uDB40\uDC6C\uDB40\uDC73\uDB40\uDC7F". David O'Farrell is "David O". */
+const DAVID_W = 'David \uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC77\uDB40\uDC6C\uDB40\uDC73\uDB40\uDC7F';
+const OLD_NAMES = { David: DAVID_W, Dave: DAVID_W, Daveo: DAVID_W };
+function swapNames(v, map) {
+  if (typeof v === 'string') return Object.prototype.hasOwnProperty.call(map, v) ? map[v] : v;
+  if (Array.isArray(v)) return v.map((x) => swapNames(x, map));
+  if (v && typeof v === 'object') { const o = {}; Object.keys(v).forEach((k) => { o[k] = swapNames(v[k], map); }); return o; }
+  return v;
+}
+function renameOld(n) { return n.iso < '2026-11-08' ? swapNames(n, OLD_NAMES) : n; }
+
 /* ---------- boot ---------- */
 async function loadNights() {
   const { data, error } = await SB.from('nights').select('iso,data');
   if (error) { pill('Offline'); return; }
-  const next = {}; (data || []).forEach((r) => { next[r.iso] = { ...r.data, iso: r.iso }; });
+  const next = {}; (data || []).forEach((r) => { next[r.iso] = renameOld({ ...r.data, iso: r.iso }); });
   NIGHTS = next; pill(active() ? 'Live' : 'Up to date', !!active()); render();
 }
 async function loadLineup() { try { const r = await fetch('lineup.json?t=' + Date.now(), { cache: 'no-store' }); LINEUP = r.ok ? await r.json() : null; } catch (e) { LINEUP = null; } }
