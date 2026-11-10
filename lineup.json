@@ -1,1 +1,4 @@
-{"iso":"2026-11-10","status":"ready","players":["Ahmet","Fede","Jake","Marc","Gustavo","Ralf","Pedro","Rory","Steve","Cathal","David O","Arnau"],"venue":"Rad Sports Studio City","time":"8pm - 9.30pm","notes":"","updatedAt":"2026-11-09T07:10:00Z","courts":null}
+{"iso":"2026-11-10","status":"ready","players":["Ahmet","Fede","Jake","Marc","Gustavo","Ralf","Pedro","Rory","Steve","Cathal","David O","Arnau"],"venue":"Rad Sports Studio City","time":"8pm - 10.15pm","notes":"Split courts: C3 and C4 8pm to 9.30pm, C7 8.30pm to 10pm. To go back to standard fixtures delete rounds, slots and playoffs.","updatedAt":"2026-11-10T06:55:00Z","courts":[3,4,7],
+"rounds":[[[0,1],[2,3]],[[0,2],[4,5]],[[0,3],[1,4],[2,5]],[[0,4],[1,2],[3,5]],[[0,5],[2,4],[1,3]],[[1,5],[3,4]]],
+"slots":["8.00pm","8.15pm","8.30pm","8.45pm","9.00pm","9.15pm"],
+"playoffs":{"fifth":"Court 7, 9.30pm","third":"Court 7, 9.45pm","final":"Court 7, 10.00pm"}}

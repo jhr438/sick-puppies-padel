@@ -376,6 +376,14 @@ const venueOf = (n) => n.venue || (LINEUP && LINEUP.iso === n.iso ? LINEUP.venue
 const whenOf = (n) => n.time || (LINEUP && LINEUP.iso === n.iso ? LINEUP.time : '') || '';
 const courtsOf = (n) => { const c = n.courts || (LINEUP && LINEUP.iso === n.iso ? LINEUP.courts : null); return Array.isArray(c) && c.length ? c : null; };
 const courtName = (n, ci) => 'Court ' + ((courtsOf(n) || [])[ci] ?? ci + 1);
+/* Custom schedule: lineup.json may carry "rounds" (team indices in seed order), "slots" (start time per round) and "playoffs" ({final, third, fifth}: where/when).
+   Remove those keys from lineup.json to go back to the standard fixtures; the scorer phone re-syncs the night while no scores are in. */
+const customRounds = (nt) => { const r = LINEUP && LINEUP.rounds; if (!Array.isArray(r) || !r.length) return null;
+  const ok = r.every((rd) => Array.isArray(rd) && rd.every((m) => Array.isArray(m) && m.length === 2 && m.every((x) => Number.isInteger(x) && x >= 0 && x < nt) && m[0] !== m[1]));
+  return ok ? r : null; };
+const fixturesFor = (nt) => customRounds(nt) || SP.fixtures(nt);
+const slotOf = (n, ri) => (Array.isArray(n.slots) && n.slots[ri]) ? n.slots[ri] : '';
+const poWhere = (n, k) => (n.playoffs && n.playoffs[k]) || '';
 const getPin = () => { try { return localStorage.getItem('sp_pin') || ''; } catch (e) { return ''; } };
 const setPin = (p) => { try { p ? localStorage.setItem('sp_pin', p) : localStorage.removeItem('sp_pin'); } catch (e) {} };
 const todayISO = () => { const d = new Date(Date.now() + 4 * 3600e3); return d.toISOString().slice(0, 10); };
@@ -533,11 +541,14 @@ function matchesMessage(n) {
   const nc = Math.max(...(n.rounds || [[]]).map((r) => r.length), 0);
   let t = `*Sick Puppies Padel* 🎾🐶\n\n*${n.date} matches* 🗓️\n${venueOf(n) ? '📍 ' + venueOf(n) + (whenOf(n) ? ', ' + whenOf(n) : '') + '\n' : ''}🏟️ ${[...Array(nc).keys()].map((ci) => courtName(n, ci)).join(', ')} · first to ${n.target}\n`;
   (n.rounds || []).forEach((r, ri) => {
-    t += `\n*Round ${ri + 1}*\n`;
+    t += `\n*Round ${ri + 1}*${slotOf(n, ri) ? ' ' + slotOf(n, ri) : ''}\n`;
     SP.groupGames(n).filter((g) => g.ri === ri).forEach((g) => { const done = g.sa !== null && g.sb !== null;
       t += `${courtName(n, g.ci)}: ${SP.tname(n, g.ta)} ${done ? g.sa + ' - ' + g.sb : 'v'} ${SP.tname(n, g.tb)}\n`; });
   });
-  t += `\n*Play-offs* 🏆 (from the group table)\nFinal: 1st v 2nd\n${n.teams.length > 3 ? '3rd place: 3rd v 4th\n' : ''}${n.teams.length > 5 ? '5th place: 5th v 6th\n' : ''}`;
+  const pw = (k) => poWhere(n, k) ? ` (${poWhere(n, k)})` : '';
+  t += n.playoffs
+    ? `\n*Play-offs* 🏆 (from the group table)\n${n.teams.length > 5 ? `5th place: 5th v 6th${pw('fifth')}\n` : ''}${n.teams.length > 3 ? `3rd place: 3rd v 4th${pw('third')}\n` : ''}Final: 1st v 2nd${pw('final')}\n`
+    : `\n*Play-offs* 🏆 (from the group table)\nFinal: 1st v 2nd\n${n.teams.length > 3 ? '3rd place: 3rd v 4th\n' : ''}${n.teams.length > 5 ? '5th place: 5th v 6th\n' : ''}`;
   return t + `\nLive scores: https://jhr438.github.io/sick-puppies-padel/`;
 }
 function resultsMessage(n) {
@@ -580,14 +591,14 @@ function roundHtml(n, ri) {
     : locked
     ? `<div class="rfoot"><span class="st done">✓ Round ${ri + 1} saved</span>${canWrite ? `<button class="sbtn e" data-editround="${ri}">Edit</button>` : ''}</div>`
     : `<div class="rfoot"><span class="st">${ed ? 'Editing' : gs.some(isSet) ? 'Part saved' : 'Not played'}</span>${ed ? `<button class="sbtn e" data-cancelround="${ri}">Cancel</button>` : ''}<button class="sbtn" data-saveround="${ri}" ${ready && canWrite ? '' : 'disabled'}>Save round ${ri + 1}</button></div>`;
-  return `<div class="h">Round ${ri + 1}</div><div class="card">${gs.map((g) => gameHtml(n, g, courtName(n, g.ci), locked)).join('')}${foot}</div>`;
+  return `<div class="h">Round ${ri + 1}${slotOf(n, ri) ? `<small>${esc(slotOf(n, ri))}</small>` : ''}</div><div class="card">${gs.map((g) => gameHtml(n, g, courtName(n, g.ci), locked)).join('')}${foot}</div>`;
 }
 function poHtml(n, g) {
   const ed = EDITING.has(g.key), locked = isSet(g) && !ed;
   const act = !canWrite ? '' : locked
     ? `<div class="act"><span class="st done">✓ Saved</span>${canWrite ? `<button class="sbtn e" data-edit="${g.key}">Edit</button>` : ''}</div>`
     : `<div class="act"><span class="st">${ed ? 'Editing' : 'Not played'}</span>${ed ? `<button class="sbtn e" data-cancel="${g.key}">Cancel</button>` : ''}<button class="sbtn" data-save="${g.key}" ${okPair(pend(n, g.key)) && canWrite ? '' : 'disabled'}>Save</button></div>`;
-  return gameHtml(n, g, 'First to ' + n.target, locked, act);
+  return gameHtml(n, g, (poWhere(n, g.stage) ? poWhere(n, g.stage) + ' \u00B7 ' : '') + 'First to ' + n.target, locked, act);
 }
 async function commit(keys) {
   const n = active(); if (!n) return;
@@ -670,10 +681,10 @@ function renderPreview(el) {
   const t = lineupTeams();
   if (!t) { el.innerHTML = `<div class="card"><div class="empty">No tournament running.<br><br>Teams for Tuesday and Friday appear here at 11:30 on the day.</div></div>`; return; }
   const S = t.S, lbl = (p) => { const x = S.byName[p]; return x && x.classified ? '#' + x.pos : 'new'; };
-  const pv = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: t.pairs.length <= 4 ? 21 : 15, teams: t.pairs.map((p) => ({ p })), rounds: SP.fixtures(t.pairs.length), scores: {}, venue: LINEUP.venue || '', time: LINEUP.time || '', courts: LINEUP.courts || null };
+  const pv = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: t.pairs.length <= 4 ? 21 : 15, teams: t.pairs.map((p) => ({ p })), rounds: fixturesFor(t.pairs.length), slots: LINEUP.slots || null, playoffs: LINEUP.playoffs || null, scores: {}, venue: LINEUP.venue || '', time: LINEUP.time || '', courts: LINEUP.courts || null };
   el.innerHTML = `${LINEUP.venue ? `<div class="card"><div class="md-head"><div><div class="d">${esc(shortDate(LINEUP.iso))}</div><div class="venue">\uD83D\uDCCD ${esc(LINEUP.venue)}${LINEUP.time ? ' \u00B7 ' + esc(LINEUP.time) : ''}</div></div></div></div>` : ''}<div class="h">${esc(shortDate(LINEUP.iso))} teams<small>${t.pairs.length} teams \u00B7 first to ${t.pairs.length <= 4 ? 21 : 15}</small></div>
   <div class="card">${t.pairs.map((p, i) => `<div class="team"><span class="no">${i + 1}</span><span class="pp">${esc(p[0])} <small class="muted">${lbl(p[0])}</small> & ${esc(p[1])} <small class="muted">${lbl(p[1])}</small></span></div>`).join('')}</div>
-  <div class="h">Matches</div><div class="card">${pv.rounds.map((r, ri) => `<div class="rh">Round ${ri + 1}</div>` + r.map((m, ci) => `<div class="mrow" style="grid-template-columns:62px 1fr 22px 1fr"><span style="font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-weight:600">${esc(courtName(pv, ci))}</span><span class="a">${esc(SP.tname(pv, m[0]))}</span><span class="x" style="text-align:center">v</span><span>${esc(SP.tname(pv, m[1]))}</span></div>`).join('')).join('')}</div>
+  <div class="h">Matches</div><div class="card">${pv.rounds.map((r, ri) => `<div class="rh">Round ${ri + 1}${slotOf(pv, ri) ? ' \u00B7 ' + esc(slotOf(pv, ri)) : ''}</div>` + r.map((m, ci) => `<div class="mrow" style="grid-template-columns:62px 1fr 22px 1fr"><span style="font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-weight:600">${esc(courtName(pv, ci))}</span><span class="a">${esc(SP.tname(pv, m[0]))}</span><span class="x" style="text-align:center">v</span><span>${esc(SP.tname(pv, m[1]))}</span></div>`).join('')).join('')}</div>
   <button class="btn sec" id="cpPvTeams">Copy teams for WhatsApp</button>
   <button class="btn sec" id="cpPvMatches">Copy matches for WhatsApp</button>
   <p class="note">Top seed with bottom seed. Live scores appear here once play starts.</p>`;
@@ -682,6 +693,11 @@ function renderPreview(el) {
 }
 async function autoCreate() {
   const a = active();
+  if (canWrite && a && LINEUP && LINEUP.iso === a.iso && !creating && !Object.keys(a.scores || {}).length) {
+    const want = { rounds: fixturesFor(a.teams.length), slots: LINEUP.slots || null, playoffs: LINEUP.playoffs || null, courts: LINEUP.courts || a.courts || null, time: LINEUP.time || a.time || '' };
+    const have = { rounds: a.rounds, slots: a.slots || null, playoffs: a.playoffs || null, courts: a.courts || null, time: a.time || '' };
+    if (JSON.stringify(want) !== JSON.stringify(have)) { creating = true; await saveNight({ ...a, ...want }); creating = false; render(); return; }
+  }
   if (canWrite && a && LINEUP && LINEUP.iso === a.iso && !creating && ((!a.venue && LINEUP.venue) || (!a.courts && LINEUP.courts))) { creating = true; await saveNight({ ...a, venue: a.venue || LINEUP.venue || '', time: a.time || LINEUP.time || '', courts: a.courts || LINEUP.courts || null }); creating = false; render(); return; }
   if (!canWrite || creating || active()) return;
   const t = lineupTeams(); if (!t) return;
@@ -689,7 +705,7 @@ async function autoCreate() {
   const lbl = (p) => { const x = t.S.byName[p]; return x && x.classified ? '#' + x.pos : 'new'; };
   const nt = t.pairs.length;
   const n = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: nt <= 4 ? 21 : 15,
-    teams: t.pairs.map((p) => ({ p, seeds: p.map(lbl).join(' & ') })), rounds: SP.fixtures(nt), scores: {}, status: 'live', createdBy: 'lineup', venue: LINEUP.venue || '', time: LINEUP.time || '', courts: LINEUP.courts || null };
+    teams: t.pairs.map((p) => ({ p, seeds: p.map(lbl).join(' & ') })), rounds: fixturesFor(nt), slots: LINEUP.slots || null, playoffs: LINEUP.playoffs || null, scores: {}, status: 'live', createdBy: 'lineup', venue: LINEUP.venue || '', time: LINEUP.time || '', courts: LINEUP.courts || null };
   if (await saveNight(n)) { mdTab = 'teams'; render(); toast('Today\u2019s teams are in'); }
   creating = false;
 }
