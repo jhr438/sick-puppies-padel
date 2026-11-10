@@ -384,8 +384,8 @@ const customRounds = (nt, iso) => { const sc = schedFor(iso), r = sc && sc.round
   const ok = r.every((rd) => Array.isArray(rd) && rd.every((m) => Array.isArray(m) && m.length === 2 && m.every((x) => Number.isInteger(x) && x >= 0 && x < nt) && m[0] !== m[1]));
   return ok ? r : null; };
 const fixturesFor = (nt, iso) => customRounds(nt, iso) || SP.fixtures(nt);
-const slotOf = (n, ri) => (Array.isArray(n.slots) && n.slots[ri]) ? n.slots[ri] : '';
-const poWhere = (n, k) => (n.playoffs && n.playoffs[k]) || '';
+const slotOf = (n, ri) => { const sl = (Array.isArray(n.slots) && n.slots) || (schedFor(n.iso) || {}).slots; return (Array.isArray(sl) && sl[ri]) || ''; };
+const poWhere = (n, k) => { const po = n.playoffs || (schedFor(n.iso) || {}).playoffs; return (po && po[k]) || ''; };
 const getPin = () => { try { return localStorage.getItem('sp_pin') || ''; } catch (e) { return ''; } };
 const setPin = (p) => { try { p ? localStorage.setItem('sp_pin', p) : localStorage.removeItem('sp_pin'); } catch (e) {} };
 const todayISO = () => { const d = new Date(Date.now() + 4 * 3600e3); return d.toISOString().slice(0, 10); };
@@ -501,9 +501,9 @@ function matchesHtml(n) {
   const row = (g) => { const wa = g.sa !== null && g.sb !== null && g.sa > g.sb, wb = g.sa !== null && g.sb !== null && g.sb > g.sa;
     return `<div class="mrow"><span class="a ${wa ? 'w' : ''}">${nm(g.ta)}</span><span class="s">${g.sa ?? '-'}</span><span class="x">-</span><span class="s">${g.sb ?? '-'}</span><span class="${wb ? 'w' : ''}" style="padding-left:6px">${nm(g.tb)}</span></div>`; };
   let h = '';
-  (n.rounds || []).forEach((r, ri) => { h += `<div class="rh">Round ${ri + 1}</div>` + SP.groupGames(n).filter((g) => g.ri === ri).map(row).join(''); });
+  (n.rounds || []).forEach((r, ri) => { h += `<div class="rh">Round ${ri + 1}${slotOf(n, ri) ? ' \u00B7 ' + esc(slotOf(n, ri)) : ''}</div>` + SP.groupGames(n).filter((g) => g.ri === ri).map(row).join(''); });
   const po = SP.poGames(n).filter((g) => g.sa !== null || g.stage === 'final');
-  if (po.length) h += `<div class="rh">Play-offs</div>` + po.map((g) => `<div class="rh" style="background:none;padding-top:6px;padding-bottom:0">${g.label}</div>` + row(g)).join('');
+  if (po.length) h += `<div class="rh">Play-offs</div>` + po.map((g) => `<div class="rh" style="background:none;padding-top:6px;padding-bottom:0">${g.label}${poWhere(n, g.stage) ? ' \u00B7 ' + esc(poWhere(n, g.stage)) : ''}</div>` + row(g)).join('');
   if (n.note) h += `<p class="note" style="padding:0 10px">${esc(n.note)}</p>`;
   return h;
 }
@@ -548,7 +548,7 @@ function matchesMessage(n) {
       t += `${courtName(n, g.ci)}: ${SP.tname(n, g.ta)} ${done ? g.sa + ' - ' + g.sb : 'v'} ${SP.tname(n, g.tb)}\n`; });
   });
   const pw = (k) => poWhere(n, k) ? ` (${poWhere(n, k)})` : '';
-  t += n.playoffs
+  t += (n.playoffs || (schedFor(n.iso) || {}).playoffs)
     ? `\n*Play-offs* 🏆 (from the group table)\n${n.teams.length > 5 ? `5th place: 5th v 6th${pw('fifth')}\n` : ''}${n.teams.length > 3 ? `3rd place: 3rd v 4th${pw('third')}\n` : ''}Final: 1st v 2nd${pw('final')}\n`
     : `\n*Play-offs* 🏆 (from the group table)\nFinal: 1st v 2nd\n${n.teams.length > 3 ? '3rd place: 3rd v 4th\n' : ''}${n.teams.length > 5 ? '5th place: 5th v 6th\n' : ''}`;
   return t + `\nLive scores: https://jhr438.github.io/sick-puppies-padel/`;
@@ -593,7 +593,7 @@ function roundHtml(n, ri) {
     : locked
     ? `<div class="rfoot"><span class="st done">✓ Round ${ri + 1} saved</span>${canWrite ? `<button class="sbtn e" data-editround="${ri}">Edit</button>` : ''}</div>`
     : `<div class="rfoot"><span class="st">${ed ? 'Editing' : gs.some(isSet) ? 'Part saved' : 'Not played'}</span>${ed ? `<button class="sbtn e" data-cancelround="${ri}">Cancel</button>` : ''}<button class="sbtn" data-saveround="${ri}" ${ready && canWrite ? '' : 'disabled'}>Save round ${ri + 1}</button></div>`;
-  return `<div class="h">Round ${ri + 1}${slotOf(n, ri) ? `<small>${esc(slotOf(n, ri))}</small>` : ''}</div><div class="card">${gs.map((g) => gameHtml(n, g, courtName(n, g.ci), locked)).join('')}${foot}</div>`;
+  return `<div class="h">Round ${ri + 1}${slotOf(n, ri) ? ' \u00B7 ' + esc(slotOf(n, ri)) : ''}</div><div class="card">${gs.map((g) => gameHtml(n, g, courtName(n, g.ci) + (slotOf(n, ri) ? ' \u00B7 ' + slotOf(n, ri) : ''), locked)).join('')}${foot}</div>`;
 }
 function poHtml(n, g) {
   const ed = EDITING.has(g.key), locked = isSet(g) && !ed;
@@ -636,7 +636,7 @@ function renderMatchday() {
     h += `<div class="card"><table class="lt"><thead><tr><th class="l" style="padding-left:12px">#</th><th class="l">Team</th><th>P</th><th>W</th><th>+/-</th><th style="padding-right:14px">Pts</th></tr></thead><tbody>${st.map((s, k) => `<tr class="${k < 2 ? 'zone' : ''}"><td class="pos">${k + 1}</td><td class="l nm">${esc(SP.tname(n, s.i))}</td><td>${s.pl}</td><td>${s.w}</td><td>${s.pf - s.pa > 0 ? '+' : ''}${s.pf - s.pa}</td><td class="rt">${s.pf}</td></tr>`).join('')}</tbody></table></div><p class="note">Ranked on total points, then wins, then points difference. Top 2 go to the final.</p>`;
   } else if (mdTab === 'playoffs') {
     h += pr.done < pr.total ? `<div class="warn">Group stage ${pr.done} of ${pr.total} saved. Line-ups update after every saved round.</div>` : `<div class="ok">Group stage complete. Line-ups set from the final table.</div>`;
-    SP.poGames(n).forEach((g) => { h += `<div class="h">${g.label}</div><div class="card">${poHtml(n, g)}</div>`; });
+    SP.poGames(n).forEach((g) => { h += `<div class="h">${g.label}${poWhere(n, g.stage) ? ' \u00B7 ' + esc(poWhere(n, g.stage)) : ''}</div><div class="card">${poHtml(n, g)}</div>`; });
   } else {
     const order = SP.finishOrder(n), missing = pr.total - pr.done;
     h += `<div class="card"><table class="lt"><tbody>${order.map((i, k) => `<tr><td class="pos">${k === 0 && pr.finalDone ? '🏆' : k + 1}</td><td class="l nm">${esc(SP.tname(n, i))}</td></tr>`).join('')}</tbody></table></div>`;
