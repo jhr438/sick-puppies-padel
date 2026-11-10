@@ -376,12 +376,14 @@ const venueOf = (n) => n.venue || (LINEUP && LINEUP.iso === n.iso ? LINEUP.venue
 const whenOf = (n) => n.time || (LINEUP && LINEUP.iso === n.iso ? LINEUP.time : '') || '';
 const courtsOf = (n) => { const c = n.courts || (LINEUP && LINEUP.iso === n.iso ? LINEUP.courts : null); return Array.isArray(c) && c.length ? c : null; };
 const courtName = (n, ci) => 'Court ' + ((courtsOf(n) || [])[ci] ?? ci + 1);
-/* Custom schedule: lineup.json may carry "rounds" (team indices in seed order), "slots" (start time per round) and "playoffs" ({final, third, fifth}: where/when).
-   Remove those keys from lineup.json to go back to the standard fixtures; the scorer phone re-syncs the night while no scores are in. */
-const customRounds = (nt) => { const r = LINEUP && LINEUP.rounds; if (!Array.isArray(r) || !r.length) return null;
+/* Custom schedule (e.g. split courts): schedule.json = {iso, courts, time, rounds (team indices in seed order), slots (start time per round), playoffs {fifth, third, final}}.
+   The scorer phone applies it to that night while no scores are in. To go back to the standard fixtures, delete schedule.json (or change its iso). */
+let SCHED = null;
+const schedFor = (iso) => (SCHED && SCHED.iso === iso) ? SCHED : null;
+const customRounds = (nt, iso) => { const sc = schedFor(iso), r = sc && sc.rounds; if (!Array.isArray(r) || !r.length) return null;
   const ok = r.every((rd) => Array.isArray(rd) && rd.every((m) => Array.isArray(m) && m.length === 2 && m.every((x) => Number.isInteger(x) && x >= 0 && x < nt) && m[0] !== m[1]));
   return ok ? r : null; };
-const fixturesFor = (nt) => customRounds(nt) || SP.fixtures(nt);
+const fixturesFor = (nt, iso) => customRounds(nt, iso) || SP.fixtures(nt);
 const slotOf = (n, ri) => (Array.isArray(n.slots) && n.slots[ri]) ? n.slots[ri] : '';
 const poWhere = (n, k) => (n.playoffs && n.playoffs[k]) || '';
 const getPin = () => { try { return localStorage.getItem('sp_pin') || ''; } catch (e) { return ''; } };
@@ -681,7 +683,7 @@ function renderPreview(el) {
   const t = lineupTeams();
   if (!t) { el.innerHTML = `<div class="card"><div class="empty">No tournament running.<br><br>Teams for Tuesday and Friday appear here at 11:30 on the day.</div></div>`; return; }
   const S = t.S, lbl = (p) => { const x = S.byName[p]; return x && x.classified ? '#' + x.pos : 'new'; };
-  const pv = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: t.pairs.length <= 4 ? 21 : 15, teams: t.pairs.map((p) => ({ p })), rounds: fixturesFor(t.pairs.length), slots: LINEUP.slots || null, playoffs: LINEUP.playoffs || null, scores: {}, venue: LINEUP.venue || '', time: LINEUP.time || '', courts: LINEUP.courts || null };
+  const pv = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: t.pairs.length <= 4 ? 21 : 15, teams: t.pairs.map((p) => ({ p })), rounds: fixturesFor(t.pairs.length, LINEUP.iso), slots: (schedFor(LINEUP.iso) || {}).slots || null, playoffs: (schedFor(LINEUP.iso) || {}).playoffs || null, scores: {}, venue: LINEUP.venue || '', time: (schedFor(LINEUP.iso) || {}).time || LINEUP.time || '', courts: (schedFor(LINEUP.iso) || {}).courts || LINEUP.courts || null };
   el.innerHTML = `${LINEUP.venue ? `<div class="card"><div class="md-head"><div><div class="d">${esc(shortDate(LINEUP.iso))}</div><div class="venue">\uD83D\uDCCD ${esc(LINEUP.venue)}${LINEUP.time ? ' \u00B7 ' + esc(LINEUP.time) : ''}</div></div></div></div>` : ''}<div class="h">${esc(shortDate(LINEUP.iso))} teams<small>${t.pairs.length} teams \u00B7 first to ${t.pairs.length <= 4 ? 21 : 15}</small></div>
   <div class="card">${t.pairs.map((p, i) => `<div class="team"><span class="no">${i + 1}</span><span class="pp">${esc(p[0])} <small class="muted">${lbl(p[0])}</small> & ${esc(p[1])} <small class="muted">${lbl(p[1])}</small></span></div>`).join('')}</div>
   <div class="h">Matches</div><div class="card">${pv.rounds.map((r, ri) => `<div class="rh">Round ${ri + 1}${slotOf(pv, ri) ? ' \u00B7 ' + esc(slotOf(pv, ri)) : ''}</div>` + r.map((m, ci) => `<div class="mrow" style="grid-template-columns:62px 1fr 22px 1fr"><span style="font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-weight:600">${esc(courtName(pv, ci))}</span><span class="a">${esc(SP.tname(pv, m[0]))}</span><span class="x" style="text-align:center">v</span><span>${esc(SP.tname(pv, m[1]))}</span></div>`).join('')).join('')}</div>
@@ -693,10 +695,13 @@ function renderPreview(el) {
 }
 async function autoCreate() {
   const a = active();
-  if (canWrite && a && LINEUP && LINEUP.iso === a.iso && !creating && !Object.keys(a.scores || {}).length) {
-    const want = { rounds: fixturesFor(a.teams.length), slots: LINEUP.slots || null, playoffs: LINEUP.playoffs || null, courts: LINEUP.courts || a.courts || null, time: LINEUP.time || a.time || '' };
-    const have = { rounds: a.rounds, slots: a.slots || null, playoffs: a.playoffs || null, courts: a.courts || null, time: a.time || '' };
-    if (JSON.stringify(want) !== JSON.stringify(have)) { creating = true; await saveNight({ ...a, ...want }); creating = false; render(); return; }
+  if (canWrite && a && !creating && !Object.keys(a.scores || {}).length) {
+    const sc = schedFor(a.iso), wasCustom = !!(a.custom || a.standardBackup), li = (LINEUP && LINEUP.iso === a.iso) ? LINEUP : {};
+    let want = null;
+    if (sc) want = { rounds: fixturesFor(a.teams.length, a.iso), slots: sc.slots || null, playoffs: sc.playoffs || null, courts: sc.courts || a.courts || null, time: sc.time || a.time || '', custom: true };
+    else if (wasCustom) want = { rounds: SP.fixtures(a.teams.length), slots: null, playoffs: null, courts: li.courts || null, time: li.time || a.time || '', custom: false, standardBackup: null };
+    if (want) { const have = Object.fromEntries(Object.keys(want).map((k) => [k, a[k] === undefined ? null : a[k]]));
+      if (JSON.stringify(want) !== JSON.stringify(have)) { creating = true; await saveNight({ ...a, ...want }); creating = false; render(); return; } }
   }
   if (canWrite && a && LINEUP && LINEUP.iso === a.iso && !creating && ((!a.venue && LINEUP.venue) || (!a.courts && LINEUP.courts))) { creating = true; await saveNight({ ...a, venue: a.venue || LINEUP.venue || '', time: a.time || LINEUP.time || '', courts: a.courts || LINEUP.courts || null }); creating = false; render(); return; }
   if (!canWrite || creating || active()) return;
@@ -705,7 +710,7 @@ async function autoCreate() {
   const lbl = (p) => { const x = t.S.byName[p]; return x && x.classified ? '#' + x.pos : 'new'; };
   const nt = t.pairs.length;
   const n = { iso: LINEUP.iso, date: `${shortDate(LINEUP.iso)} ${LINEUP.iso.slice(0, 4)}`, target: nt <= 4 ? 21 : 15,
-    teams: t.pairs.map((p) => ({ p, seeds: p.map(lbl).join(' & ') })), rounds: fixturesFor(nt), slots: LINEUP.slots || null, playoffs: LINEUP.playoffs || null, scores: {}, status: 'live', createdBy: 'lineup', venue: LINEUP.venue || '', time: LINEUP.time || '', courts: LINEUP.courts || null };
+    teams: t.pairs.map((p) => ({ p, seeds: p.map(lbl).join(' & ') })), rounds: fixturesFor(nt, LINEUP.iso), slots: (schedFor(LINEUP.iso) || {}).slots || null, playoffs: (schedFor(LINEUP.iso) || {}).playoffs || null, custom: !!schedFor(LINEUP.iso), scores: {}, status: 'live', createdBy: 'lineup', venue: LINEUP.venue || '', time: (schedFor(LINEUP.iso) || {}).time || LINEUP.time || '', courts: (schedFor(LINEUP.iso) || {}).courts || LINEUP.courts || null };
   if (await saveNight(n)) { mdTab = 'teams'; render(); toast('Today\u2019s teams are in'); }
   creating = false;
 }
@@ -803,7 +808,8 @@ async function loadNights() {
   const next = {}; (data || []).forEach((r) => { next[r.iso] = renameOld({ ...r.data, iso: r.iso }); });
   NIGHTS = next; pill(active() ? 'Live' : 'Up to date', !!active()); render();
 }
-async function loadLineup() { try { const r = await fetch('lineup.json?t=' + Date.now(), { cache: 'no-store' }); LINEUP = r.ok ? await r.json() : null; } catch (e) { LINEUP = null; } }
+async function loadLineup() { try { const r = await fetch('lineup.json?t=' + Date.now(), { cache: 'no-store' }); LINEUP = r.ok ? await r.json() : null; } catch (e) { LINEUP = null; }
+  try { const r2 = await fetch('schedule.json?t=' + Date.now(), { cache: 'no-store' }); SCHED = r2.ok ? await r2.json() : null; } catch (e) { SCHED = null; } }
 render();
 (async () => {
   if (!window.supabase) { pill('Offline'); $('#v-matchday').innerHTML = '<div class="empty">Couldn\u2019t connect. Check your signal and reload.</div>'; return; }
