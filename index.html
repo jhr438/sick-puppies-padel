@@ -677,7 +677,10 @@ document.addEventListener('input', (e) => {
 /* viewers: next tournament preview */
 function lineupTeams() {
   if (!LINEUP || LINEUP.status !== 'ready' || !Array.isArray(LINEUP.players) || LINEUP.iso < todayISO() || NIGHTS[LINEUP.iso]) return null;
-  return SP.makeTeams(NIGHTS, LINEUP.players);
+  const fixed = (LINEUP.fixed || []).filter((pr) => pr.length === 2 && pr.every((n) => LINEUP.players.includes(n)));
+  if (!fixed.length) return SP.makeTeams(NIGHTS, LINEUP.players);
+  const taken = fixed.flat(), t = SP.makeTeams(NIGHTS, LINEUP.players.filter((n) => !taken.includes(n)));
+  return { ...t, pairs: [...t.pairs, ...fixed], notes: [...t.notes, ...fixed.map(([a, b]) => `${a} & ${b} paired by hand`)] };
 }
 function renderPreview(el) {
   const t = lineupTeams();
@@ -809,6 +812,8 @@ async function loadNights() {
   NIGHTS = next; pill(active() ? 'Live' : 'Up to date', !!active()); render();
 }
 async function loadLineup() { try { const r = await fetch('lineup.json?t=' + Date.now(), { cache: 'no-store' }); LINEUP = r.ok ? await r.json() : null; } catch (e) { LINEUP = null; }
+  /* Manual pairs (overrides.json, keyed by date). Delete the date's entry to go back to automatic pairing. */
+  try { const o = await fetch('overrides.json?t=' + Date.now(), { cache: 'no-store' }); const ov = o.ok ? await o.json() : {}; if (LINEUP && ov[LINEUP.iso] && Array.isArray(ov[LINEUP.iso].pairs)) LINEUP.fixed = ov[LINEUP.iso].pairs; } catch (e) { /* no overrides */ }
   try { const r2 = await fetch('schedule.json?t=' + Date.now(), { cache: 'no-store' }); SCHED = r2.ok ? await r2.json() : null; } catch (e) { SCHED = null; } }
 render();
 (async () => {
