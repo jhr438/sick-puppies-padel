@@ -238,6 +238,19 @@ SP.standings = (n) => {
   });
   return t.sort((x, y) => y.pf - x.pf || y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa) || x.i - y.i);
 };
+/* Team totals for a night incl. play-offs and finals (W, L, for, against). */
+SP.nightTotals = (n) => {
+  const t = n.teams.map((x, i) => ({ i, pf: 0, pa: 0, w: 0, l: 0 }));
+  SP.allGames(n).forEach((g) => {
+    if (g.sa === null || g.sb === null) return;
+    const A = t[g.ta], B = t[g.tb]; if (!A || !B) return;
+    A.pf += g.sa; A.pa += g.sb; B.pf += g.sb; B.pa += g.sa;
+    if (g.sa > g.sb) { A.w++; B.l++; } else if (g.sb > g.sa) { B.w++; A.l++; }
+  });
+  const f = SP.poGames(n).find((g) => g.stage === 'final'), c = SP.champion(n);
+  if (f && (f.sa === null || f.sb === null) && (c === f.ta || c === f.tb)) { const o = c === f.ta ? f.tb : f.ta; if (t[c] && t[o]) { t[c].w++; t[o].l++; } }
+  return t;
+};
 SP.poStages = (n) => SP.STAGES.slice(0, Math.floor(n.teams.length / 2));
 SP.poTeams = (n) => {
   if (n.po) return n.po;
@@ -301,6 +314,12 @@ SP.season = (nights, opts = {}) => {
         });
       });
     });
+    const fg = SP.poGames(n).find((g) => g.stage === 'final');
+    if (fg && (fg.sa === null || fg.sb === null) && (champ === fg.ta || champ === fg.tb)) {
+      const lose = champ === fg.ta ? fg.tb : fg.ta;
+      n.teams[champ].p.forEach((p) => { const x = get(p); x.w++; x.form.push({ r: 'W', iso: n.iso, txt: `Final v ${SP.tname(n, lose)}` }); });
+      (n.teams[lose] ? n.teams[lose].p : []).forEach((p) => { const x = get(p); x.l++; x.form.push({ r: 'L', iso: n.iso, txt: `Final v ${SP.tname(n, champ)}` }); });
+    }
     n.teams.forEach((t, i) => t.p.forEach((p, k) => {
       const x = get(p), partner = t.p[1 - k];
       x.nights.push(n.iso);
@@ -515,7 +534,7 @@ function renderResults() {
     const c = SP.champion(n), order = SP.finishOrder(n), live = !SP.isComplete(n);
     h += `<div class="card res ${openRes === n.iso ? 'open' : ''}" data-iso="${n.iso}"><div class="top2"><div><div class="d">${live ? '<span class="live-dot"></span>' : ''}${shortDate(n.iso)}</div><div class="f">${n.venue ? esc(n.venue) + ' · ' : ''}${n.teams.length} teams · first to ${n.target}</div></div>
       <div class="ch">${c !== null && !live ? '🏆 ' + esc(SP.tname(n, c)) : live ? 'In progress' : '-'}<small>${live ? '' : 'Champions'}</small></div></div>
-      <div class="body"><table class="lt"><thead><tr><th class="l" style="padding-left:14px">Pos</th><th class="l">Team</th><th>W</th><th>For</th><th style="padding-right:14px">Agst</th></tr></thead><tbody>${order.map((i, k) => { const s = SP.standings(n).find((x) => x.i === i); return `<tr><td class="pos">${k + 1}</td><td class="l nm">${esc(SP.tname(n, i))}</td><td>${s.w}</td><td>${s.pf}</td><td style="padding-right:14px">${s.pa}</td></tr>`; }).join('')}</tbody></table>${matchesHtml(n)}${canWrite && !live ? `<div class="pad"><button class="btn sec" data-reopen="${n.iso}">Reopen to correct a score</button></div>` : ''}</div></div>`;
+      <div class="body"><table class="lt"><thead><tr><th class="l" style="padding-left:14px">Pos</th><th class="l">Team</th><th>W</th><th>L</th><th>For</th><th style="padding-right:14px">Agst</th></tr></thead><tbody>${order.map((i, k) => { const s = SP.nightTotals(n).find((x) => x.i === i); return `<tr><td class="pos">${k + 1}</td><td class="l nm">${esc(SP.tname(n, i))}</td><td>${s.w}</td><td>${s.l}</td><td>${s.pf}</td><td style="padding-right:14px">${s.pa}</td></tr>`; }).join('')}</tbody></table>${matchesHtml(n)}${canWrite && !live ? `<div class="pad"><button class="btn sec" data-reopen="${n.iso}">Reopen to correct a score</button></div>` : ''}</div></div>`;
   });
   h += `<p class="note">Group table ranked on total points, then wins. W, For and Agst are group games only.</p>`;
   $('#v-results').innerHTML = h;
