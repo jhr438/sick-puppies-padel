@@ -294,6 +294,9 @@ SP.progress = (n) => {
 
 /* ---- season stats from completed nights ---- */
 SP.rating = (s, p) => (s + 50) / (p + 100) * 100;
+/* Manual rating adjustments (adjustments.json): notional points won added to a player's rating only, not to their stats. Delete a player's entry to remove it. */
+SP.adj = {};
+SP.adjOf = (name) => (SP.adj[name] && Number(SP.adj[name].pts)) || 0;
 SP.season = (nights, opts = {}) => {
   const list = SP.sorted(nights).filter(SP.isComplete).filter((n) => !opts.before || n.iso < opts.before);
   const P = {};
@@ -329,10 +332,10 @@ SP.season = (nights, opts = {}) => {
       const pr = x.partners[partner] || (x.partners[partner] = { n: 0, titles: 0, pf: 0, pa: 0 });
       pr.n++; if (champ === i) pr.titles++; pr.pf += teamPts[i][0]; pr.pa += teamPts[i][1];
     }));
-    Object.values(P).forEach((x) => { if (x.nights[x.nights.length - 1] === n.iso) x.trend.push({ iso: n.iso, r: SP.rating(x.s, x.pl) }); });
+    Object.values(P).forEach((x) => { if (x.nights[x.nights.length - 1] === n.iso) x.trend.push({ iso: n.iso, r: SP.rating(x.s + SP.adjOf(x.name), x.pl + SP.adjOf(x.name)) }); });
   });
   const players = Object.values(P).map((x) => ({
-    ...x, played: x.nights.length, rating: SP.rating(x.s, x.pl), pct: x.pl ? x.s / x.pl * 100 : 0,
+    ...x, played: x.nights.length, rating: SP.rating(x.s + SP.adjOf(x.name), x.pl + SP.adjOf(x.name)), pct: x.pl ? x.s / x.pl * 100 : 0,
     gpct: x.gp ? x.gs / x.gp * 100 : 0, classified: x.nights.length >= 2,
   }));
   const ranked = players.filter((x) => x.classified).sort((a, b) => b.rating - a.rating || a.name.localeCompare(b.name));
@@ -830,7 +833,8 @@ async function loadNights() {
   const next = {}; (data || []).forEach((r) => { next[r.iso] = renameOld({ ...r.data, iso: r.iso }); });
   NIGHTS = next; pill(active() ? 'Live' : 'Up to date', !!active()); render();
 }
-async function loadLineup() { try { const r = await fetch('lineup.json?t=' + Date.now(), { cache: 'no-store' }); LINEUP = r.ok ? await r.json() : null; } catch (e) { LINEUP = null; }
+async function loadLineup() { try { const ra = await fetch('adjustments.json?t=' + Date.now(), { cache: 'no-store' }); SP.adj = ra.ok ? await ra.json() : {}; } catch (e) { SP.adj = {}; }
+  try { const r = await fetch('lineup.json?t=' + Date.now(), { cache: 'no-store' }); LINEUP = r.ok ? await r.json() : null; } catch (e) { LINEUP = null; }
   /* Manual pairs (overrides.json, keyed by date). Delete the date's entry to go back to automatic pairing. */
   try { const o = await fetch('overrides.json?t=' + Date.now(), { cache: 'no-store' }); const ov = o.ok ? await o.json() : {}; if (LINEUP && ov[LINEUP.iso] && Array.isArray(ov[LINEUP.iso].pairs)) LINEUP.fixed = ov[LINEUP.iso].pairs; } catch (e) { /* no overrides */ }
   try { const r2 = await fetch('schedule.json?t=' + Date.now(), { cache: 'no-store' }); SCHED = r2.ok ? await r2.json() : null; } catch (e) { SCHED = null; } }

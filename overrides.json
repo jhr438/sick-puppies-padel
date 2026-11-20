@@ -1,3 +1,44 @@
 {
-  "2026-11-17": { "pairs": [["Fede", "Gustavo"], ["David O", "Jake"], ["Ahmet", "Steve"], ["Ralf", "Pedro"]], "note": "Jake 17 Nov: teams as posted in WhatsApp" }
+  "2026-11-17": {
+    "pairs": [
+      [
+        "Fede",
+        "Gustavo"
+      ],
+      [
+        "David O",
+        "Jake"
+      ],
+      [
+        "Ahmet",
+        "Steve"
+      ],
+      [
+        "Ralf",
+        "Pedro"
+      ]
+    ],
+    "note": "Jake 17 Nov: teams as posted in WhatsApp"
+  },
+  "2026-11-20": {
+    "pairs": [
+      [
+        "Marc",
+        "Rory"
+      ],
+      [
+        "Joe",
+        "Steve"
+      ],
+      [
+        "Cathal",
+        "Jake"
+      ],
+      [
+        "David 🏴󠁧󠁢󠁷󠁬󠁳󠁿",
+        "Ahmet"
+      ]
+    ],
+    "note": "Jake 20 Nov: teams as posted in WhatsApp"
+  }
 }
